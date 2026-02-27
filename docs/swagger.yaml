@@ -1,0 +1,97 @@
+basePath: /
+definitions:
+  report.Artifact:
+    properties:
+      input_path:
+        type: string
+      kind:
+        type: string
+    type: object
+  report.Node:
+    properties:
+      compressed_size_bytes:
+        type: integer
+      hash_error:
+        type: string
+      mode:
+        type: integer
+      modified_time:
+        type: string
+      path:
+        type: string
+      path_normalization_error:
+        type: string
+      sha256:
+        type: string
+      size_bytes:
+        type: integer
+      type:
+        type: string
+    type: object
+  report.Report:
+    properties:
+      artifact:
+        $ref: '#/definitions/report.Artifact'
+      nodes:
+        items:
+          $ref: '#/definitions/report.Node'
+        type: array
+      stats:
+        $ref: '#/definitions/report.Stats'
+    type: object
+  report.Stats:
+    properties:
+      bytes_hashed:
+        type: integer
+      dirs:
+        type: integer
+      files:
+        type: integer
+      files_skipped:
+        type: integer
+      other:
+        type: integer
+      symlinks:
+        type: integer
+      total_nodes:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Analyzes build artifacts (ZIP, JAR, TAR, etc.) and returns a JSON report.
+  title: Decouple API
+  version: "1.0"
+paths:
+  /analyze:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a ZIP or TAR family file and get a JSON analysis report
+      parameters:
+      - description: Artifact file to analyze
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/report.Report'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Analyze an artifact
+swagger: "2.0"

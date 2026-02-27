@@ -1,0 +1,12 @@
+.git
+.gitignore
+README.md
+
+# Local build outputs
+api
+decouple
+
+# Editor/OS files
+.DS_Store
+.idea
+.vscode
