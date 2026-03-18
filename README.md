@@ -1,4 +1,4 @@
-# decouple
+# decouple v2
 
 `decouple` is a Go-based artifact analysis tool with both:
 - a CLI (`cmd/decouple`)
@@ -6,20 +6,22 @@
 
 It scans archive and binary artifacts and returns a structured JSON report containing discovered nodes, metadata, hashes, and scan stats.
 
-## Why this project exists
+## Version 2: What's new
 
-Build and release artifacts are often nested and heterogeneous. `decouple` provides a single scanner that can:
-- normalize paths safely
-- recursively inspect nested archives with depth and size guards
-- emit deterministic JSON for downstream tooling
+Version 2 introduces significant enhancements for modern artifact analysis:
+- **Disk Image Analysis (`.img`)**: Full support for partition table parsing (MBR/GPT) and filesystem traversal (ext4, FAT32) using `diskfs`.
+- **OS Hinting**: Automatic detection of OS/Distribution information within disk images (e.g., `/etc/os-release`, Windows Registry hives).
+- **Expanded Format Support**: Added PE binary family (`.exe`, `.dll`, `.sys`) and deep recursive inspection for nested archives.
+- **Enhanced Safety**: Improved controls for recursion depth, maximum file sizes, and concurrent scanning limits.
+- **Improved API**: More detailed analysis status and confidence levels.
 
 ## Supported inputs
 
-- Archive family: `.zip`, `.jar`, `.war`, `.whl`, `.apk`, `.aab`, `.ipa`
-- Tar family: `.tar`, `.tar.gz`, `.tgz`
-- Gzip: `.gz`
-- PE family: `.exe`, `.dll`, `.sys`
-- Disk images: `.img` (partition and supported filesystem traversal)
+- **Archive family**: `.zip`, `.jar`, `.war`, `.whl`, `.apk`, `.aab`, `.ipa`
+- **Tar family**: `.tar`, `.tar.gz`, `.tgz`
+- **Gzip**: `.gz`
+- **PE family**: `.exe`, `.dll`, `.sys`
+- **Disk images**: `.img` (partition and supported filesystem traversal)
 
 Format detection uses magic bytes when extension-based detection is ambiguous.
 
@@ -31,6 +33,7 @@ Format detection uses magic bytes when extension-based detection is ambiguous.
   - type, path, size, compressed size
   - mode and modified time (where available)
   - hash and nested-archive errors
+- **New in v2**: Partition index, start/end offsets, and filesystem type for disk images.
 - Safety controls to limit:
   - maximum files and bytes
   - recursion depth
@@ -55,12 +58,6 @@ go build -o decouple-api ./cmd/api
 ./decouple --input /path/to/your-artifact.zip
 ```
 
-Write JSON to file:
-
-```bash
-./decouple --input /path/to/your-artifact.tar.gz --output report.json
-```
-
 ### Run API
 
 ```bash
@@ -69,36 +66,30 @@ Write JSON to file:
 
 Server starts on `:8080`.
 
-- Analyze endpoint: `POST /analyze` (`multipart/form-data`, field name: `file`)
+- Analyze endpoint: `POST /analyze`
 - Swagger UI: `GET /swagger/index.html`
-
-Example:
-
-```bash
-curl -s -X POST http://localhost:8080/analyze \
-  -F "file=@/path/to/your-artifact.zip"
-```
-
-## Test
-
-```bash
-GOCACHE=$(pwd)/.gocache go test ./...
-```
 
 ## Example output shape
 
 ```json
 {
   "artifact": {
-    "input_path": "sample.zip",
-    "kind": "archive"
+    "input_path": "sample.img",
+    "kind": "img",
+    "os_hint": "Ubuntu 22.04 LTS",
+    "analysis_status": {
+      "confidence": "authoritative",
+      "provider": "diskfs"
+    }
   },
   "nodes": [
     {
-      "path": "sub/a.txt",
+      "path": "partition_1/etc/os-release",
       "type": "file",
-      "size_bytes": 5,
-      "sha256": "..."
+      "size_bytes": 348,
+      "sha256": "...",
+      "filesystem_type": "Ext4",
+      "partition_index": 1
     }
   ],
   "stats": {
@@ -107,7 +98,7 @@ GOCACHE=$(pwd)/.gocache go test ./...
     "dirs": 0,
     "symlinks": 0,
     "other": 0,
-    "bytes_hashed": 5,
+    "bytes_hashed": 348,
     "files_skipped": 0,
     "nested_archives_scanned": 0,
     "nested_errors": 0
@@ -120,9 +111,11 @@ GOCACHE=$(pwd)/.gocache go test ./...
 - `cmd/decouple`: CLI entrypoint
 - `cmd/api`: Gin HTTP API + Swagger route
 - `internal/archivedecouple`: format dispatch and nested scan orchestration
-- `internal/*decouple`: format-specific scanners (zip, tar, gzip, pe, img)
+- `internal/artifact`: artifact type and path normalization
+- `internal/detect`: magic-byte based format detection
 - `internal/report`: report schema
 - `internal/safety`: scan safety limits
+- `internal/scanconfig`: scan configuration
 - `docs/`: swagger artifacts
 
 ## Notes

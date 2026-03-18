@@ -20,6 +20,3 @@ testdata/
 .vscode/
 tmp/
 .tmp_*.go
-
-# Local tools
-.tools/syft
