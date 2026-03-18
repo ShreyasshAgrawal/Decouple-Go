@@ -1,0 +1,353 @@
+<h1 id="how-to-use-this-guide">How To Use This Guide</h1>
+<p>This guide is for someone new to Go and new to this project. It
+explains the code line‑by‑line for the most important files. Read it in
+order. Keep the code open in your editor and follow along.</p>
+<p>If you see a word you don’t know, search in the “Go Basics” section
+first.</p>
+<h1 id="go-basics-you-need">Go Basics You Need</h1>
+<h2 id="packages-and-files">Packages and Files</h2>
+<ul>
+<li>Each folder is usually one <strong>package</strong>.</li>
+<li>All <code>.go</code> files in a folder share the same package name
+at the top of the file.</li>
+</ul>
+<p>Example: <code>internal/archivedecouple/*.go</code> are all in
+package <code>archivedecouple</code>.</p>
+<h2 id="imports">Imports</h2>
+<p>At the top of each file you’ll see imports. They are like
+<code>#include</code> in C or <code>import</code> in Python/JS.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;os&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;decouple/internal/archivedecouple&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
+<h2 id="functions-and-methods">Functions and Methods</h2>
+<p>A function:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> add<span class="op">(</span>a <span class="dt">int</span><span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">+</span> b <span class="op">}</span></span></code></pre></div>
+<p>A method is a function attached to a type:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>h <span class="op">*</span>imgHandler<span class="op">)</span> Detect<span class="op">(...)</span> <span class="dt">bool</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span></span></code></pre></div>
+<p>Here, <code>h</code> is the receiver (like <code>this</code> in other
+languages).</p>
+<h2 id="structs">Structs</h2>
+<p>Structs are simple objects with fields.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Report <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  Artifact Artifact</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  Nodes    <span class="op">[]</span>Node</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  Stats    Stats</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="interfaces">Interfaces</h2>
+<p>Interfaces are contracts. If a type implements all methods, it
+satisfies the interface.</p>
+<p>This project uses the <code>Handler</code> interface to plug in
+different format scanners.</p>
+<h2 id="errors">Errors</h2>
+<p>Go uses explicit errors:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>rep<span class="op">,</span> err <span class="op">:=</span> handler<span class="op">.</span>Decouple<span class="op">(...)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> <span class="ot">nil</span><span class="op">,</span> err <span class="op">}</span></span></code></pre></div>
+<h2 id="context">Context</h2>
+<p><code>context.Context</code> is how Go cancels work and sets
+timeouts. Look for <code>ctx</code>.</p>
+<h2 id="goroutines-and-channels">Goroutines and Channels</h2>
+<p><code>go func() { ... }()</code> starts a goroutine (lightweight
+thread).</p>
+<p>Channels are used to limit parallel work.</p>
+<h2 id="defer">Defer</h2>
+<p><code>defer</code> runs cleanup code at the end of the function.</p>
+<h1 id="project-map-folders">Project Map (Folders)</h1>
+<ul>
+<li><code>cmd/decouple</code>: CLI entrypoint.</li>
+<li><code>cmd/api</code>: HTTP API server.</li>
+<li><code>internal/archivedecouple</code>: Core scanner and
+handlers.</li>
+<li><code>internal/artifact</code>: File extension to kind mapping.</li>
+<li><code>internal/detect</code>: Magic‑byte format detection.</li>
+<li><code>internal/report</code>: JSON schema for output.</li>
+<li><code>internal/scanconfig</code>: Scan limits config.</li>
+<li><code>internal/safety</code>: Safety limits and path
+normalization.</li>
+<li><code>docs</code>: Swagger docs and this guide.</li>
+<li><code>testdata</code>: Sample artifacts for tests.</li>
+</ul>
+<h1 id="linebyline-walkthrough">Line‑By‑Line Walkthrough</h1>
+<h2 id="cli-entrypoint">1) CLI Entrypoint</h2>
+<p>File: <code>cmd/decouple/main.go</code></p>
+<h3 id="imports-1">Imports</h3>
+<ul>
+<li><code>context</code>: cancellation and timeouts.</li>
+<li><code>encoding/json</code>: to encode output as JSON.</li>
+<li><code>flag</code>: command line arguments.</li>
+<li><code>fmt</code>, <code>io</code>, <code>os</code>: standard
+input/output utilities.</li>
+<li><code>decouple/internal/archivedecouple</code>: core scanner.</li>
+<li><code>decouple/internal/artifact</code>: determine file kind.</li>
+<li><code>decouple/internal/report</code>: output schema.</li>
+</ul>
+<h3 id="main">main()</h3>
+<ol type="1">
+<li><code>flag.StringVar(&amp;inputPath, ...)</code> and
+<code>flag.StringVar(&amp;outputPath, ...)</code> define flags.</li>
+<li><code>flag.Parse()</code> reads <code>--input</code> and
+<code>--output</code> from the command line.</li>
+<li>If <code>inputPath</code> is empty, print error and exit.</li>
+<li><code>kind := artifact.KindFromPath(inputPath)</code> maps extension
+to a logical kind.</li>
+<li><code>archivedecouple.DecouplePath(...)</code> runs the
+scanner.</li>
+<li>If output path is set, create file and write JSON there; otherwise
+write to stdout.</li>
+</ol>
+<h2 id="api-entrypoint">2) API Entrypoint</h2>
+<p>File: <code>cmd/api/main.go</code></p>
+<h3 id="analyzehandler">analyzeHandler</h3>
+<ol type="1">
+<li><code>pickUploadedFile(...)</code> tries multiple field names
+(<code>file</code>, <code>upload</code>, <code>artifact</code>).</li>
+<li>Log request info with <code>slog</code>.</li>
+<li>Save upload to a temp file.</li>
+<li>Determine kind by filename extension.</li>
+<li>Create a context with timeout.</li>
+<li>Call <code>archivedecouple.DecouplePath(...)</code>.</li>
+<li>Return the JSON report or an error.</li>
+</ol>
+<h3 id="pickuploadedfile">pickUploadedFile</h3>
+<ul>
+<li>Reads multipart form data.</li>
+<li>If no file found, returns a helpful error listing what fields were
+provided.</li>
+</ul>
+<h2 id="core-scanner-orchestration">3) Core Scanner Orchestration</h2>
+<p>File: <code>internal/archivedecouple/archivedecouple.go</code></p>
+<h3 id="key-types">Key types</h3>
+<ul>
+<li><code>runtimeState</code>: tracks limits, temp dir, and semaphore
+for parallel work.</li>
+<li><code>state.cleanup()</code>: deletes the temp dir after scan.</li>
+</ul>
+<h3 id="decouplepath">DecouplePath</h3>
+<p>Line by line:</p>
+<ol type="1">
+<li><code>RegisterDefaults()</code> sets up the handler registry
+once.</li>
+<li><code>cfg = ensureConfig(cfg)</code> fills defaults.</li>
+<li>Create <code>state</code> with a semaphore <code>sem</code> sized to
+<code>MaxConcurrentScans</code>.</li>
+<li><code>defer state.cleanup()</code> ensures temp dir is removed.</li>
+<li>If <code>displayName</code> is blank, use
+<code>filepath.Base(path)</code>.</li>
+<li>Log scan start.</li>
+<li>Call <code>decoupleArchive(...)</code> to do the real work.</li>
+<li>Fill stats and return report.</li>
+</ol>
+<h3 id="decouplearchive">decoupleArchive</h3>
+<ol type="1">
+<li>Check <code>ctx.Done()</code> (cancellation).</li>
+<li>Open file and read first 512 bytes.</li>
+<li><code>FindHandler(header, displayName)</code> chooses a
+handler.</li>
+<li>If unknown format, return error.</li>
+<li>If <code>kind</code> empty, map from handler’s format.</li>
+<li>Call <code>handler.Decouple</code> to scan top‑level.</li>
+<li>Prefix node paths with <code>pathPrefix</code>.</li>
+<li>If at max depth, stop.</li>
+<li>Build <code>nodeIndex</code> map for quick updates.</li>
+<li>Call <code>handler.WalkNested</code> to find nested archives.</li>
+<li>For each nested archive:
+<ul>
+<li>Extract to temp file via <code>prepareNestedArchive</code>.</li>
+<li>Spawn goroutine to scan nested archive.</li>
+<li>Merge results into parent report.</li>
+</ul></li>
+</ol>
+<h3 id="preparenestedarchive">prepareNestedArchive</h3>
+<ol type="1">
+<li>Enforces depth and size limits.</li>
+<li>Tracks <code>nestedArchivesScanned</code> and temp disk usage.</li>
+<li>Creates temp file in scan’s temp dir.</li>
+<li>Copies nested content into that temp file.</li>
+<li>Returns temp path or sets error on node.</li>
+</ol>
+<h2 id="handler-registry">4) Handler Registry</h2>
+<p>File: <code>internal/archivedecouple/registry.go</code></p>
+<ul>
+<li><code>Handler</code> interface defines <code>Detect</code>,
+<code>Decouple</code>, <code>WalkNested</code>.</li>
+<li><code>RegisterDefaults</code> order matters:
+<ul>
+<li>tar → zip → pe → img → fat → gzip.</li>
+<li>First match wins.</li>
+</ul></li>
+</ul>
+<h2 id="output-schema">5) Output Schema</h2>
+<p>File: <code>internal/report/schema.go</code></p>
+<h3 id="report">Report</h3>
+<ul>
+<li><code>Artifact</code>: info about the input.</li>
+<li><code>Nodes</code>: list of files/directories found.</li>
+<li><code>Stats</code>: totals and counters.</li>
+</ul>
+<h3 id="node">Node</h3>
+<p>Important fields:</p>
+<ul>
+<li><code>Path</code>, <code>Type</code>, <code>SizeBytes</code></li>
+<li><code>SHA256</code>, <code>HashError</code></li>
+<li><code>CompressedSizeBytes</code> for zip entries</li>
+<li><code>PartitionIndex</code>, <code>StartOffsetBytes</code>,
+<code>EndOffsetBytes</code> for <code>.img</code> partitions</li>
+<li><code>FilesystemType</code> for <code>.img</code></li>
+<li><code>Status</code> for <code>.img</code> parse status</li>
+</ul>
+<h2 id="format-detection">6) Format Detection</h2>
+<p>File: <code>internal/detect/detect.go</code></p>
+<p><code>DetectBytes</code> checks magic bytes in this order:</p>
+<ol type="1">
+<li>Gzip (<code>1f 8b</code>)</li>
+<li>Zip (<code>PK</code>)</li>
+<li>Tar (<code>ustar</code> at offset 257)</li>
+<li>PE (<code>MZ</code>)</li>
+<li>IMG (MBR <code>0x55AA</code> or GPT <code>EFI PART</code>)</li>
+<li>Raw filesystem signatures (ext4, FAT32) treated as IMG</li>
+</ol>
+<h2 id="safety-limits">7) Safety Limits</h2>
+<p>File: <code>internal/safety/limits.go</code></p>
+<p>These protect against zip bombs and huge scans. Examples:</p>
+<ul>
+<li>Max files: 1,000,000</li>
+<li>Max total bytes: 32 GiB</li>
+<li>Max nested archives: 1,000</li>
+<li>Max depth: 3</li>
+</ul>
+<p>Config overrides are in
+<code>internal/scanconfig/config.go</code>.</p>
+<h2 id="zip-handler">8) ZIP Handler</h2>
+<p>File: <code>internal/archivedecouple/zip.go</code></p>
+<ul>
+<li>Detects ZIP by magic bytes.</li>
+<li>Reads all entries and normalizes paths.</li>
+<li>Hashes files in parallel.</li>
+<li><code>WalkNested</code> peeks headers to find nested archives.</li>
+</ul>
+<h2 id="tar-handler">9) TAR Handler</h2>
+<p>File: <code>internal/archivedecouple/tar.go</code></p>
+<ul>
+<li>Supports plain tar and tar.gz.</li>
+<li>Streams entries without loading entire file.</li>
+<li>Enforces max files and max total bytes.</li>
+<li>Hashes regular files.</li>
+<li><code>WalkNested</code> peeks into each entry to detect nested
+formats.</li>
+</ul>
+<h2 id="gzip-handler">10) GZIP Handler</h2>
+<p>File: <code>internal/archivedecouple/gzip.go</code></p>
+<ul>
+<li>Treats gzip as a single file payload.</li>
+<li>Uses embedded name if present.</li>
+<li>Hashes payload up to limit.</li>
+<li>If payload looks like archive, it can be nested scanned.</li>
+</ul>
+<h2 id="pe-handler">11) PE Handler</h2>
+<p>File: <code>internal/archivedecouple/pe.go</code></p>
+<ul>
+<li>Uses Go’s <code>debug/pe</code>.</li>
+<li>Emits one node per section.</li>
+<li>Detects overlay data after last section.</li>
+<li>Allows nested scanning inside sections or overlay.</li>
+</ul>
+<h2 id="img-handler-deep">12) IMG Handler (Deep)</h2>
+<p>File: <code>internal/archivedecouple/img.go</code></p>
+<p>This file is the most complex. Read it slowly.</p>
+<h3 id="detect">Detect</h3>
+<ul>
+<li>If extension is <code>.img</code>, return true.</li>
+<li>If MBR magic <code>0x55AA</code>, return true.</li>
+<li>If GPT signature <code>EFI PART</code>, return true.</li>
+</ul>
+<h3 id="signature-probe">Signature probe</h3>
+<p><code>imgSignatureProbe</code> reads bytes at known offsets to
+identify containers and filesystems.</p>
+<p>It can detect:</p>
+<ul>
+<li>Gzip, QCOW2, VMDK, VHDX containers (unsupported).</li>
+<li>LVM, LUKS, NTFS, XFS, Btrfs signatures.</li>
+</ul>
+<p>If it detects unsupported types, it sets <code>analysis_status</code>
+so the report explains why it’s unreadable.</p>
+<h3 id="decouple-flow">Decouple flow</h3>
+<ol type="1">
+<li>Create <code>report.Report</code>.</li>
+<li>Create <code>imgSignatureProbe</code> to detect container
+status.</li>
+<li><code>diskfs.Open(path)</code> opens the image.</li>
+<li><code>GetPartitionTable()</code> tries to find partitions.</li>
+<li>If no partition table:
+<ul>
+<li>Treat whole image as a filesystem.</li>
+<li>If parse fails, emit one node with <code>hash_error</code> and
+<code>analysis_status</code>.</li>
+</ul></li>
+<li>If partitions:
+<ul>
+<li>For each partition, <code>decoupleFilesystem</code>.</li>
+<li>On failure, emit partition node with error.</li>
+</ul></li>
+</ol>
+<h3 id="openfilesystem">openFilesystem</h3>
+<ol type="1">
+<li>Try <code>d.GetFilesystem(partIndex)</code>.</li>
+<li>If that fails and signature says ext4, try
+<code>ext4.Read</code>.</li>
+</ol>
+<h3 id="decouplefilesystem">decoupleFilesystem</h3>
+<ul>
+<li>Walk filesystem recursively.</li>
+<li>Create a node for each file or directory.</li>
+<li>Hash files in parallel (limit:
+<code>MaxIMGConcurrentScans</code>).</li>
+<li>Detect OS hints:
+<ul>
+<li><code>/etc/os-release</code>, <code>/usr/lib/os-release</code>, or
+Windows registry hive.</li>
+</ul></li>
+</ul>
+<h3 id="walknested">WalkNested</h3>
+<ul>
+<li>Even inside <code>.img</code>, it tries to detect nested archives
+(zip, tar, pe, etc.).</li>
+<li>It can also detect archives directly in raw partition data.</li>
+</ul>
+<h3 id="img-fallback-behavior">IMG fallback behavior</h3>
+<p>If filesystem parse fails:</p>
+<ul>
+<li>Add one node for the partition or root.</li>
+<li>Fill <code>filesystem_type</code> if detected.</li>
+<li>Set <code>hash_error</code> with parse error.</li>
+<li>Add <code>analysis_status</code> explaining why it is
+unreadable.</li>
+</ul>
+<h1 id="study-path-detailed">Study Path (Detailed)</h1>
+<ol type="1">
+<li>Read <code>cmd/decouple/main.go</code> and follow the flags and JSON
+output.</li>
+<li>Read <code>cmd/api/main.go</code> and the HTTP flow.</li>
+<li>Read <code>internal/archivedecouple/archivedecouple.go</code>
+carefully.</li>
+<li>Read <code>internal/archivedecouple/registry.go</code> and memorize
+handler order.</li>
+<li>Read <code>internal/detect/detect.go</code> and
+<code>internal/artifact/artifact.go</code>.</li>
+<li>Read <code>internal/report/schema.go</code>.</li>
+<li>Read handlers: <code>zip.go</code>, <code>tar.go</code>,
+<code>gzip.go</code>, <code>pe.go</code>, <code>img.go</code>.</li>
+<li>Read <code>internal/safety/limits.go</code> and
+<code>internal/safety/path.go</code>.</li>
+<li>Read tests in <code>internal/archivedecouple/*_test.go</code>.</li>
+</ol>
+<h1 id="quick-commands">Quick Commands</h1>
+<p>Build CLI:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build <span class="at">-o</span> decouple ./cmd/decouple</span></code></pre></div>
+<p>Build API:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build <span class="at">-o</span> decouple-api ./cmd/api</span></code></pre></div>
+<p>Run tests:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="va">GOCACHE</span><span class="op">=</span><span class="va">$(</span><span class="bu">pwd</span><span class="va">)</span>/.gocache <span class="ex">go</span> test ./...</span></code></pre></div>

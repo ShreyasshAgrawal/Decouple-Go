@@ -61,7 +61,7 @@ info:
   contact: {}
   description: Analyzes build artifacts (ZIP, JAR, TAR, etc.) and returns a JSON report.
   title: Decouple API
-  version: "1.0"
+  version: "1.2.0"
 paths:
   /analyze:
     post:

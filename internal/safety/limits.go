@@ -30,3 +30,10 @@ const MaxIMGProbeBytes uint64 = 4 * 1024 * 1024 // 4 MiB
 
 // MaxIMGPartitions is the maximum number of partition nodes emitted for .img metadata parsing.
 const MaxIMGPartitions int = 256
+
+// MaxIMGConcurrentScans is the maximum parallel hashing workers within IMG filesystem traversal.
+// Kept lower than MaxConcurrentScans to reduce random I/O thrash on large disk images.
+const MaxIMGConcurrentScans int = 4
+
+// MaxConcurrentScans is the maximum number of parallel goroutines for hashing and nested scanning.
+const MaxConcurrentScans int = 16

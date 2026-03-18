@@ -5,7 +5,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,7 +31,7 @@ func TestDecouplePath_MaxDepthBoundary(t *testing.T) {
 	defer os.Remove(outerZip)
 
 	t.Run("exactly MaxDepth includes that level", func(t *testing.T) {
-		rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+		rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 			MaxDepth:          1,
 			MaxNestedArchives: 10,
 			MaxNestedBytes:    20 * 1024 * 1024,
@@ -46,7 +49,7 @@ func TestDecouplePath_MaxDepthBoundary(t *testing.T) {
 	})
 
 	t.Run("one beyond MaxDepth is not recursed", func(t *testing.T) {
-		rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+		rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 			MaxDepth:          2,
 			MaxNestedArchives: 10,
 			MaxNestedBytes:    20 * 1024 * 1024,
@@ -71,7 +74,7 @@ func TestDecouplePath_MaxNestedArchivesLimit(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 1,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -97,7 +100,7 @@ func TestDecouplePath_MaxNestedBytesLimit(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    8, // force rejection
@@ -127,7 +130,7 @@ func TestDecouplePath_MaxTempDiskBytesLimit(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -154,7 +157,7 @@ func TestDecouplePath_MalformedNestedTar_SetsNodeError(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -188,7 +191,7 @@ func TestDecouplePath_PathPrefixingAndMixedFormats_ZipZipTar(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          4,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -224,7 +227,7 @@ func TestDecouplePath_HappyPath_ZipContainsTarGzContainsFile(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -250,7 +253,7 @@ func TestDecouplePath_MixedFormats_ZipInsideTarGzInsideZip(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          4,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -278,7 +281,7 @@ func TestDecouplePath_MaxDepthExceeded_SetsNodeErrorAndSkipsLeaf(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{
 		MaxDepth:          1,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -300,7 +303,7 @@ func TestDecouplePath_TarContainsGzip_RecursesPayload(t *testing.T) {
 	})
 	defer os.Remove(outerTar)
 
-	rep, err := DecouplePath(outerTar, "", "tar", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerTar, "", "tar", &scanconfig.Config{
 		MaxDepth:          3,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -324,7 +327,7 @@ func TestDecouplePath_GzipPayloadArchive_RecursesFurther(t *testing.T) {
 	})
 	defer os.Remove(outerTar)
 
-	rep, err := DecouplePath(outerTar, "", "tar", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerTar, "", "tar", &scanconfig.Config{
 		MaxDepth:          4,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -349,7 +352,7 @@ func TestDecouplePath_GzipNoEmbeddedName_UsesDeterministicFallbackPath(t *testin
 	})
 	defer os.Remove(outerTar)
 
-	rep, err := DecouplePath(outerTar, "", "tar", &scanconfig.Config{
+	rep, err := DecouplePath(context.Background(), outerTar, "", "tar", &scanconfig.Config{
 		MaxDepth:          4,
 		MaxNestedArchives: 10,
 		MaxNestedBytes:    20 * 1024 * 1024,
@@ -371,12 +374,90 @@ func TestDecouplePath_IMGTopLevel_UsesDisplayNameFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep, err := DecouplePath(imgPath, "", "img", &scanconfig.Config{})
+	rep, err := DecouplePath(context.Background(), imgPath, "", "img", &scanconfig.Config{})
 	if err != nil {
 		t.Fatalf("DecouplePath: %v", err)
 	}
 	if findNodeByPath(rep, "disk.img") == nil {
 		t.Fatalf("expected top-level img node path to use base filename")
+	}
+	if rep.Artifact.Status == nil {
+		t.Fatalf("expected artifact analysis_status")
+	}
+	if rep.Artifact.Status.Provider != "internal_magic" {
+		t.Fatalf("artifact analysis_status.provider = %q, want internal_magic", rep.Artifact.Status.Provider)
+	}
+}
+
+func TestDecouplePath_IMGFilesystemParseFailure_SetsExplicitUnreadableStatus(t *testing.T) {
+	imgPath := filepath.Join(t.TempDir(), "disk.img")
+	imgBytes := make([]byte, 4096)
+	// LUKS header magic: LUKS + 0xBA 0xBE
+	copy(imgBytes[:6], []byte{'L', 'U', 'K', 'S', 0xBA, 0xBE})
+	if err := os.WriteFile(imgPath, imgBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := DecouplePath(context.Background(), imgPath, "", "img", &scanconfig.Config{})
+	if err != nil {
+		t.Fatalf("DecouplePath: %v", err)
+	}
+	node := findNodeByPath(rep, "disk.img")
+	if node == nil {
+		t.Fatalf("expected top-level img node")
+	}
+	if node.HashError == "" {
+		t.Fatalf("expected hash_error describing filesystem parse failure")
+	}
+	if !strings.Contains(node.HashError, "filesystem parse failed") {
+		t.Fatalf("unexpected hash_error: %q", node.HashError)
+	}
+	if node.Status == nil {
+		t.Fatalf("expected node analysis_status")
+	}
+	if node.Status.Confidence != "unreadable" {
+		t.Fatalf("analysis_status.confidence = %q, want unreadable", node.Status.Confidence)
+	}
+	if node.Status.Reason != "LUKS_ENCRYPTED" {
+		t.Fatalf("analysis_status.reason = %q, want LUKS_ENCRYPTED", node.Status.Reason)
+	}
+	if node.Status.Provider != "internal_magic" {
+		t.Fatalf("analysis_status.provider = %q, want internal_magic", node.Status.Provider)
+	}
+}
+
+func TestDecouplePath_IMGLVMPartition_SetsUnsupportedLVMReason(t *testing.T) {
+	imgPath := filepath.Join(t.TempDir(), "disk.img")
+	imgBytes := make([]byte, 8192)
+	copy(imgBytes[512:520], []byte("LABELONE"))
+	if err := os.WriteFile(imgPath, imgBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := DecouplePath(context.Background(), imgPath, "", "img", &scanconfig.Config{})
+	if err != nil {
+		t.Fatalf("DecouplePath: %v", err)
+	}
+	node := findNodeByPath(rep, "disk.img")
+	if node == nil {
+		t.Fatalf("expected top-level img node")
+	}
+	if node.Status == nil {
+		t.Fatalf("expected node analysis_status")
+	}
+	if node.Status.Reason != "UNSUPPORTED_LVM_CONTAINER" {
+		t.Fatalf("analysis_status.reason = %q, want UNSUPPORTED_LVM_CONTAINER", node.Status.Reason)
+	}
+}
+
+func TestIMGUnreadableStatusForError_MapsCorruptFilesystemReason(t *testing.T) {
+	h := &imgHandler{}
+	status := h.unreadableStatusForError(nil, errors.New("invalid superblock checksum"))
+	if status == nil {
+		t.Fatalf("expected status")
+	}
+	if status.Reason != "CORRUPT_FILESYSTEM" {
+		t.Fatalf("reason = %q, want CORRUPT_FILESYSTEM", status.Reason)
 	}
 }
 
@@ -386,12 +467,37 @@ func TestDecouplePath_ZipContainsIMG_NodePathContract(t *testing.T) {
 	})
 	defer os.Remove(outerZip)
 
-	rep, err := DecouplePath(outerZip, "", "zip", &scanconfig.Config{})
+	rep, err := DecouplePath(context.Background(), outerZip, "", "zip", &scanconfig.Config{})
 	if err != nil {
 		t.Fatalf("DecouplePath: %v", err)
 	}
 	if findNodeByPath(rep, "firmware.img") == nil {
 		t.Fatalf("expected nested img node path")
+	}
+}
+
+func TestDecouplePath_PEWithOverlayZip_Recurses(t *testing.T) {
+	overlayZip := buildZipBytes(t, map[string][]byte{
+		"nested.txt": []byte("hello-from-overlay"),
+	})
+	pePath := buildTestPEWithOverlay(t, overlayZip)
+	defer os.Remove(pePath)
+
+	rep, err := DecouplePath(context.Background(), pePath, "", "exe", &scanconfig.Config{
+		MaxDepth:          3,
+		MaxNestedArchives: 10,
+		MaxNestedBytes:    20 * 1024 * 1024,
+		MaxTempDiskBytes:  20 * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("DecouplePath: %v", err)
+	}
+
+	if findNodeByPath(rep, "overlay") == nil {
+		t.Fatalf("missing overlay node for pe")
+	}
+	if findNodeByPath(rep, "overlay/nested.txt") == nil {
+		t.Fatalf("missing nested file discovered from pe overlay zip")
 	}
 }
 
@@ -559,6 +665,44 @@ func buildMalformedTarBytes(t *testing.T) []byte {
 	}
 	// Intentionally do not write body and do not close tar writer.
 	return buf.Bytes()
+}
+
+func buildTestPEWithOverlay(t *testing.T, overlay []byte) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "main.go")
+	exePath := filepath.Join(tmpDir, "sample.exe")
+
+	src := "package main\nfunc main(){}\n"
+	if err := os.WriteFile(srcPath, []byte(src), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	cmd := exec.Command("go", "build", "-o", exePath, srcPath)
+	cmd.Env = append(os.Environ(),
+		"GOOS=windows",
+		"GOARCH=amd64",
+		"CGO_ENABLED=0",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build test pe: %v\n%s", err, string(out))
+	}
+
+	f, err := os.OpenFile(exePath, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open pe for append: %v", err)
+	}
+	if _, err := f.Write(overlay); err != nil {
+		_ = f.Close()
+		t.Fatalf("append overlay zip: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close appended pe: %v", err)
+	}
+
+	return exePath
 }
 
 func mapKeys(m map[string][]byte) []string {

@@ -19,7 +19,7 @@ Build and release artifacts are often nested and heterogeneous. `decouple` provi
 - Tar family: `.tar`, `.tar.gz`, `.tgz`
 - Gzip: `.gz`
 - PE family: `.exe`, `.dll`, `.sys`
-- Disk images: `.img` (metadata-only partition reporting)
+- Disk images: `.img` (partition and supported filesystem traversal)
 
 Format detection uses magic bytes when extension-based detection is ambiguous.
 
@@ -128,4 +128,4 @@ GOCACHE=$(pwd)/.gocache go test ./...
 ## Notes
 
 - This repository currently focuses on static artifact introspection, not malware detection.
-- `.img` analysis currently reports partition metadata only and does not perform filesystem extraction.
+- `.img` analysis attempts partition parsing and filesystem traversal (including ext4 fallback); unsupported images fall back to partition/file metadata.

@@ -1,89 +1,112 @@
 package archivedecouple
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"decouple/internal/artifact"
-	"decouple/internal/detect"
-	"decouple/internal/gzipdecouple"
-	"decouple/internal/imgdecouple"
-	"decouple/internal/pedecouple"
 	"decouple/internal/report"
 	"decouple/internal/scanconfig"
-	"decouple/internal/tardecouple"
-	"decouple/internal/zipdecouple"
 )
 
 type runtimeState struct {
+	mu                    sync.Mutex
 	nestedArchivesScanned int
 	tempDiskBytesWritten  uint64
+	sem                   chan struct{}
+	tempDir               string
 }
 
-func DecouplePath(path string, displayName string, kind string, cfg *scanconfig.Config) (*report.Report, error) {
+func (s *runtimeState) cleanup() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tempDir != "" {
+		slog.Debug("cleaning up temp directory", "dir", s.tempDir)
+		os.RemoveAll(s.tempDir)
+	}
+}
+
+func (s *runtimeState) createTempFile() (*os.File, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tempDir == "" {
+		d, err := os.MkdirTemp("", "decouple-scan-*")
+		if err != nil {
+			return nil, err
+		}
+		s.tempDir = d
+		slog.Debug("created temp directory for scan", "dir", d)
+	}
+	return os.CreateTemp(s.tempDir, "nested-*")
+}
+
+const unknownNestedSize = 0
+
+func DecouplePath(ctx context.Context, path string, displayName string, kind string, cfg *scanconfig.Config) (*report.Report, error) {
+	RegisterDefaults()
 	cfg = ensureConfig(cfg)
-	state := &runtimeState{}
+	state := &runtimeState{
+		sem: make(chan struct{}, cfg.EffectiveMaxConcurrentScans()),
+	}
+	defer state.cleanup()
+
 	if strings.TrimSpace(displayName) == "" {
 		displayName = filepath.Base(path)
 	}
 
-	rep, err := decoupleArchive(path, kind, cfg, state, 0, displayName)
+	slog.Info("starting scan", "path", path, "kind", kind, "display_name", displayName)
+
+	rep, err := decoupleArchive(ctx, path, kind, cfg, state, 0, displayName, displayName)
 	if err != nil {
+		slog.Error("scan failed", "path", path, "error", err)
 		return nil, err
 	}
 	rep.Stats.NestedArchivesScanned = state.nestedArchivesScanned
 	rep.Stats.TotalNodes = len(rep.Nodes)
+	
+	slog.Info("scan complete", "path", path, "nodes", rep.Stats.TotalNodes, "nested_archives", rep.Stats.NestedArchivesScanned, "nested_errors", rep.Stats.NestedErrors)
 	return rep, nil
 }
 
-func decoupleArchive(path string, kind string, cfg *scanconfig.Config, state *runtimeState, depth int, pathPrefix string) (*report.Report, error) {
-	format, err := detect.Detect(path)
-	if err != nil {
-		if kind == "img" {
-			format = artifact.FormatIMG
-		} else {
-			return nil, err
-		}
+func decoupleArchive(ctx context.Context, path string, kind string, cfg *scanconfig.Config, state *runtimeState, depth int, displayName string, pathPrefix string) (*report.Report, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	header := make([]byte, 512)
+	n, _ := f.Read(header)
+	f.Close()
+
+	handler := FindHandler(header[:n], displayName)
+	if handler == nil {
+		slog.Warn("unsupported format", "path", path, "display_name", displayName)
+		return nil, fmt.Errorf("unsupported format for %q", path)
+	}
+
+	slog.Debug("detected format", "path", path, "handler", handler.Format(), "depth", depth)
 
 	if kind == "" {
 		var ok bool
-		kind, ok = artifact.DefaultKindForFormat(format)
+		kind, ok = artifact.DefaultKindForFormat(handler.Format())
 		if !ok {
-			return nil, fmt.Errorf("unsupported format %q", format)
+			kind = string(handler.Format())
 		}
 	}
 
-	var walkNested func(path string, fn func(entryPath string, size uint64, open func() (io.ReadCloser, error)) error) error
-
-	var rep *report.Report
-	switch format {
-	case artifact.FormatZip:
-		rep, err = zipdecouple.DecoupleZip(path, cfg, kind)
-		walkNested = walkNestedZip
-	case artifact.FormatTar:
-		rep, err = tardecouple.DecoupleTar(path, kind, cfg)
-		walkNested = walkNestedTar
-	case artifact.FormatGzip:
-		rep, err = gzipdecouple.DecoupleGzip(path, kind, cfg)
-		walkNested = walkNestedGzip
-	case artifact.FormatIMG:
-		rep, err = imgdecouple.DecoupleIMG(path, kind, cfg)
-		walkNested = func(_ string, _ func(entryPath string, size uint64, open func() (io.ReadCloser, error)) error) error {
-			return nil
-		}
-	case artifact.FormatPE:
-		rep, err = pedecouple.DecouplePE(path, kind, cfg)
-		walkNested = func(_ string, _ func(entryPath string, size uint64, open func() (io.ReadCloser, error)) error) error {
-			return nil
-		}
-	default:
-		return nil, fmt.Errorf("unsupported format %q", format)
-	}
+	rep, err := handler.Decouple(ctx, path, kind, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +117,7 @@ func decoupleArchive(path string, kind string, cfg *scanconfig.Config, state *ru
 		}
 	}
 
-	if depth > cfg.EffectiveMaxDepth() {
+	if depth >= cfg.EffectiveMaxDepth() {
 		sortNodes(rep)
 		rep.Stats.TotalNodes = len(rep.Nodes)
 		return rep, nil
@@ -105,12 +128,58 @@ func decoupleArchive(path string, kind string, cfg *scanconfig.Config, state *ru
 		nodeIndex[rep.Nodes[i].Path] = i
 	}
 
-	if err := walkNested(path, func(entryPath string, size uint64, open func() (io.ReadCloser, error)) error {
+	var wg sync.WaitGroup
+	var repMu sync.Mutex
+
+	err = handler.WalkNested(ctx, path, func(entryPath string, size uint64, open func() (io.ReadCloser, error)) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		fullNodePath := joinArchivePath(pathPrefix, entryPath)
 		nestedKind := artifact.KindFromPath(entryPath)
-		processNestedArchive(fullNodePath, size, cfg, state, depth, rep, nodeIndex, open, nestedKind)
+
+		// We MUST extract synchronously to ensure we don't advance the archive reader (e.g. for TAR)
+		// but we can scan the extracted file in parallel.
+		tempPath, err := prepareNestedArchive(ctx, fullNodePath, size, cfg, state, depth, rep, nodeIndex, open)
+		if err != nil || tempPath == "" {
+			return nil // Limit exceeded or error already set
+		}
+
+		wg.Add(1)
+		go func(tPath string, nPath string, nKind string) {
+			defer wg.Done()
+			defer os.Remove(tPath)
+
+			select {
+			case <-ctx.Done():
+				return
+			case state.sem <- struct{}{}: // Acquire
+			}
+			defer func() { <-state.sem }() // Release
+
+			slog.Debug("recursing into nested archive", "path", nPath, "depth", depth+1)
+			childRep, err := decoupleArchive(ctx, tPath, nKind, cfg, state, depth+1, filepath.Base(nPath), nPath)
+			if err != nil {
+				slog.Warn("nested scan failed", "path", nPath, "error", err)
+				repMu.Lock()
+				setNodeNestedError(rep, nodeIndex, nPath, "nested_archive_parse_failed", err.Error())
+				repMu.Unlock()
+				return
+			}
+
+			repMu.Lock()
+			mergeReport(rep, childRep)
+			repMu.Unlock()
+		}(tempPath, fullNodePath, nestedKind)
+
 		return nil
-	}); err != nil {
+	})
+	wg.Wait()
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -119,77 +188,86 @@ func decoupleArchive(path string, kind string, cfg *scanconfig.Config, state *ru
 	return rep, nil
 }
 
-func processNestedArchive(nodePath string, size uint64, cfg *scanconfig.Config, state *runtimeState, depth int, rep *report.Report, nodeIndex map[string]int, open func() (io.ReadCloser, error), nestedKind string) {
+func prepareNestedArchive(ctx context.Context, nodePath string, size uint64, cfg *scanconfig.Config, state *runtimeState, depth int, rep *report.Report, nodeIndex map[string]int, open func() (io.ReadCloser, error)) (string, error) {
 	sizeKnown := size != unknownNestedSize
 	if depth+1 > cfg.EffectiveMaxDepth() {
 		setNodeNestedError(rep, nodeIndex, nodePath, "max_depth_exceeded", "nested max depth exceeded")
-		return
-	}
-	if state.nestedArchivesScanned >= cfg.EffectiveMaxNestedArchives() {
-		setNodeNestedError(rep, nodeIndex, nodePath, "max_nested_archives_exceeded", "max nested archives exceeded")
-		return
-	}
-	if sizeKnown && size > cfg.EffectiveMaxNestedBytes() {
-		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_too_large", fmt.Sprintf("nested archive exceeds max size (%d)", cfg.EffectiveMaxNestedBytes()))
-		return
-	}
-	if sizeKnown && state.tempDiskBytesWritten+size > cfg.EffectiveMaxTempDiskBytes() {
-		setNodeNestedError(rep, nodeIndex, nodePath, "max_temp_disk_bytes_exceeded", fmt.Sprintf("temp disk write budget exceeded (%d)", cfg.EffectiveMaxTempDiskBytes()))
-		return
+		return "", nil
 	}
 
-	temp, err := os.CreateTemp("", "decouple-nested-*")
+	state.mu.Lock()
+	if state.nestedArchivesScanned >= cfg.EffectiveMaxNestedArchives() {
+		state.mu.Unlock()
+		slog.Warn("safety limit: max nested archives exceeded", "limit", cfg.EffectiveMaxNestedArchives(), "path", nodePath)
+		setNodeNestedError(rep, nodeIndex, nodePath, "max_nested_archives_exceeded", "max nested archives exceeded")
+		return "", nil
+	}
+	if sizeKnown && size > cfg.EffectiveMaxNestedBytes() {
+		state.mu.Unlock()
+		slog.Warn("safety limit: nested archive too large", "size", size, "limit", cfg.EffectiveMaxNestedBytes(), "path", nodePath)
+		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_too_large", fmt.Sprintf("nested archive exceeds max size (%d)", cfg.EffectiveMaxNestedBytes()))
+		return "", nil
+	}
+	if sizeKnown && state.tempDiskBytesWritten+size > cfg.EffectiveMaxTempDiskBytes() {
+		state.mu.Unlock()
+		slog.Warn("safety limit: max temp disk bytes exceeded", "written", state.tempDiskBytesWritten, "next_size", size, "limit", cfg.EffectiveMaxTempDiskBytes(), "path", nodePath)
+		setNodeNestedError(rep, nodeIndex, nodePath, "max_temp_disk_bytes_exceeded", fmt.Sprintf("temp disk write budget exceeded (%d)", cfg.EffectiveMaxTempDiskBytes()))
+		return "", nil
+	}
+	state.mu.Unlock()
+
+	temp, err := state.createTempFile()
 	if err != nil {
 		setNodeNestedError(rep, nodeIndex, nodePath, "temp_file_create_failed", err.Error())
-		return
+		return "", nil
 	}
 	tempPath := temp.Name()
-	defer os.Remove(tempPath)
 	defer temp.Close()
 
 	rc, err := open()
 	if err != nil {
+		os.Remove(tempPath)
 		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_extract_failed", err.Error())
-		return
+		return "", nil
 	}
+	defer rc.Close()
+
 	limit := cfg.EffectiveMaxNestedBytes() + 1
 	if sizeKnown {
 		limit = size + 1
 	}
 	limited := io.LimitReader(rc, int64(limit))
+	// io.Copy doesn't check context, but we are inside prepareNestedArchive which is synchronous per-archive
 	n, copyErr := io.Copy(temp, limited)
-	closeErr := rc.Close()
 	if copyErr != nil {
+		os.Remove(tempPath)
 		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_extract_failed", copyErr.Error())
-		return
-	}
-	if closeErr != nil {
-		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_extract_failed", closeErr.Error())
-		return
+		return "", nil
 	}
 	if sizeKnown && uint64(n) > size {
+		os.Remove(tempPath)
 		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_extract_failed", "copied beyond declared size")
-		return
+		return "", nil
 	}
 	if !sizeKnown && uint64(n) > cfg.EffectiveMaxNestedBytes() {
+		os.Remove(tempPath)
 		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_too_large", fmt.Sprintf("nested archive exceeds max size (%d)", cfg.EffectiveMaxNestedBytes()))
-		return
+		return "", nil
 	}
 
 	written := uint64(n)
+	state.mu.Lock()
 	if state.tempDiskBytesWritten+written > cfg.EffectiveMaxTempDiskBytes() {
+		state.mu.Unlock()
+		os.Remove(tempPath)
 		setNodeNestedError(rep, nodeIndex, nodePath, "max_temp_disk_bytes_exceeded", fmt.Sprintf("temp disk write budget exceeded (%d)", cfg.EffectiveMaxTempDiskBytes()))
-		return
+		return "", nil
 	}
 	state.tempDiskBytesWritten += written
-
 	state.nestedArchivesScanned++
-	childRep, err := decoupleArchive(tempPath, nestedKind, cfg, state, depth+1, nodePath)
-	if err != nil {
-		setNodeNestedError(rep, nodeIndex, nodePath, "nested_archive_parse_failed", err.Error())
-		return
-	}
-	mergeReport(rep, childRep)
+	state.mu.Unlock()
+
+	return tempPath, nil
 }
 
 func mergeReport(dst *report.Report, src *report.Report) {

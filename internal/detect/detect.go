@@ -69,5 +69,23 @@ func DetectBytes(header []byte) (artifact.Format, error) {
 		return artifact.FormatPE, nil
 	}
 
+	// 5. IMG (MBR or GPT)
+	if n >= 512 && header[510] == 0x55 && header[511] == 0xAA {
+		return artifact.FormatIMG, nil
+	}
+	if n >= 520 && string(header[512:520]) == "EFI PART" {
+		return artifact.FormatIMG, nil
+	}
+
+	// 6. Raw Filesystem Images (detect as IMG for handler processing)
+	// Ext4 superblock at 1024 offset: 0x53 0xEF at byte 56
+	if n >= 1024+58 && header[1024+56] == 0x53 && header[1024+57] == 0xEF {
+		return artifact.FormatIMG, nil
+	}
+	// FAT32 signature at offset 0x52
+	if n >= 0x52+5 && string(header[0x52:0x52+5]) == "FAT32" {
+		return artifact.FormatIMG, nil
+	}
+
 	return artifact.FormatUnknown, fmt.Errorf("unsupported format: unknown magic bytes")
 }

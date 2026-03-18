@@ -4,16 +4,18 @@ import "decouple/internal/safety"
 
 // Config contains decouple limits. Zero values use safety defaults.
 type Config struct {
-	MaxFileBytesToHash uint64
-	MaxFiles           int
-	MaxTotalBytes      uint64
-	MaxPESections      int
-	MaxIMGProbeBytes   uint64
-	MaxIMGPartitions   int
-	MaxDepth           int
-	MaxNestedArchives  int
-	MaxNestedBytes     uint64
-	MaxTempDiskBytes   uint64
+	MaxFileBytesToHash    uint64
+	MaxFiles              int
+	MaxTotalBytes         uint64
+	MaxPESections         int
+	MaxIMGProbeBytes      uint64
+	MaxIMGPartitions      int
+	MaxIMGConcurrentScans int
+	MaxDepth              int
+	MaxNestedArchives     int
+	MaxNestedBytes        uint64
+	MaxTempDiskBytes      uint64
+	MaxConcurrentScans    int
 }
 
 func (c *Config) EffectiveMaxFileBytesToHash() uint64 {
@@ -58,6 +60,13 @@ func (c *Config) EffectiveMaxIMGPartitions() int {
 	return safety.MaxIMGPartitions
 }
 
+func (c *Config) EffectiveMaxIMGConcurrentScans() int {
+	if c != nil && c.MaxIMGConcurrentScans > 0 {
+		return c.MaxIMGConcurrentScans
+	}
+	return safety.MaxIMGConcurrentScans
+}
+
 func (c *Config) EffectiveMaxDepth() int {
 	if c != nil && c.MaxDepth > 0 {
 		return c.MaxDepth
@@ -84,4 +93,11 @@ func (c *Config) EffectiveMaxTempDiskBytes() uint64 {
 		return c.MaxTempDiskBytes
 	}
 	return safety.MaxTempDiskBytes
+}
+
+func (c *Config) EffectiveMaxConcurrentScans() int {
+	if c != nil && c.MaxConcurrentScans > 0 {
+		return c.MaxConcurrentScans
+	}
+	return safety.MaxConcurrentScans
 }
